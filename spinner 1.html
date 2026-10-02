@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
+  <title>Leo & Andrew's Retire Manual Dragging Rehab Program</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #111;
+      font-family: Arial, sans-serif;
+      color: white;
+    }
+
+    #viewer {
+      position: fixed;
+      inset: 0;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+
+    canvas:active {
+      cursor: grabbing;
+    }
+
+    #emptyMessage {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 30px;
+      text-align: center;
+      color: rgba(255, 255, 255, 0.8);
+      pointer-events: none;
+    }
+
+    #emptyMessage strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 24px;
+      color: white;
+    }
+
+    #controls {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      width: min(680px, calc(100vw - 40px));
+      padding: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 14px;
+      background: rgba(15, 15, 15, 0.82);
+      backdrop-filter: blur(12px);
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: 16px;
+      transition:
+        opacity 0.25s ease,
+        transform 0.25s ease,
+        top 0.3s ease,
+        left 0.3s ease;
+      z-index: 10;
+    }
+
+    #controls.hidden {
+      opacity: 0;
+      transform: translateY(-15px);
+      pointer-events: none;
+    }
+
+    #controls.awaitingImage:not(.collapsed) {
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    #controls.awaitingImage:not(.collapsed).hidden {
+      transform: translate(-50%, -65%);
+    }
+
+    h1 {
+      margin: 0 0 14px;
+      font-size: 20px;
+    }
+
+    .field {
+      margin-top: 14px;
+    }
+
+    #controls.collapsed {
+      width: min(260px, calc(100vw - 40px));
+      grid-template-columns: 1fr;
+      padding-top: 52px;
+    }
+
+    #controls.collapsed h1,
+    #controls.collapsed .hint,
+    #controls.collapsed > .field:not(:has(#duration)):not(:has(#direction)) {
+      display: none;
+    }
+
+    #controls.collapsed .buttons {
+      grid-template-columns: 1fr;
+      margin-top: 14px;
+    }
+
+    #collapseButton {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: auto;
+      padding: 8px 11px;
+      z-index: 1;
+    }
+
+    #controls > h1,
+    #controls > .buttons,
+    #controls > .hint {
+      grid-column: 1 / -1;
+    }
+
+    .settingsGrid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0 16px;
+    }
+
+    .settingsGrid .field {
+      min-width: 0;
+    }
+
+    @media (max-width: 560px) {
+      #controls {
+        grid-template-columns: 1fr;
+      }
+
+      .settingsGrid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    label {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.76);
+    }
+
+    input,
+    select,
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 8px;
+      font: inherit;
+    }
+
+    input[type="file"],
+    input[type="number"],
+    select {
+      padding: 10px;
+      color: white;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    input[type="range"] {
+      accent-color: white;
+    }
+
+    option {
+      color: black;
+    }
+
+    .valueRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .value {
+      min-width: 52px;
+      text-align: right;
+      font-size: 13px;
+      color: white;
+    }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 9px;
+      margin-top: 16px;
+    }
+
+    #controls > .field:has(#imageInput) {
+      grid-column: 1 / -1;
+    }
+
+    button {
+      padding: 11px;
+      color: white;
+      background: rgba(255, 255, 255, 0.13);
+      cursor: pointer;
+      transition:
+        background 0.15s ease,
+        transform 0.15s ease;
+    }
+
+    button:hover {
+      background: rgba(255, 255, 255, 0.22);
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    button.primary {
+      background: white;
+      color: black;
+      font-weight: 700;
+    }
+
+    button.primary:hover {
+      background: #dddddd;
+    }
+
+    .hint {
+      margin: 14px 0 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: rgba(255, 255, 255, 0.58);
+    }
+
+    #showControls {
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      width: auto;
+      padding: 9px 13px;
+      z-index: 9;
+      opacity: 0;
+      pointer-events: none;
+      background: rgba(15, 15, 15, 0.7);
+    }
+
+    #showControls.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* In recording mode, controls are available only through H or Esc. */
+    body.recording #showControls {
+      display: none;
+    }
+
+    #progressContainer {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.12);
+      z-index: 8;
+    }
+
+    #progress {
+      width: 0;
+      height: 100%;
+      background: white;
+    }
+
+    body.recording #progressContainer {
+      opacity: 0;
+    }
+
+    body.recording canvas {
+      cursor: none;
+    }
+
+  </style>
+</head>
+
+<body>
+  <div id="viewer"></div>
+
+  <div id="emptyMessage">
+    <div>
+      <strong>360° Panorama Viewer</strong>
+      Choose an equirectangular 360° JPG or PNG to begin.
+    </div>
+  </div>
+
+  <div id="controls" class="awaitingImage">
+    <button id="collapseButton" type="button" aria-expanded="true">Collapse</button>
+    <h1>Leo & Andrew's Retire Manual Dragging Rehab Program</h1>
+
+    <div class="field">
+      <label for="imageInput">360° image</label>
+      <input
+        id="imageInput"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+      />
+    </div>
+
+    <div class="field">
+      <label for="duration">One full rotation duration</label>
+      <input
+        id="duration"
+        type="number"
+        min="1"
+        max="600"
+        step="1"
+        value="30"
+      />
+    </div>
+
+    <div class="field">
+      <label for="direction">Direction</label>
+      <select id="direction">
+        <option value="1">Clockwise</option>
+        <option value="-1">Counter-clockwise</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="recordingResolution">Recording/export resolution</label>
+      <select id="recordingResolution">
+        <option value="1920x1080">1080p Full HD (1920 × 1080)</option>
+        <option value="1280x720">720p HD (1280 × 720)</option>
+        <option value="854x480">480p SD (854 × 480)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="exportFormat">Recording/export format</label>
+      <select id="exportFormat">
+        <option value="webm">WebM (recommended)</option>
+        <option value="mp4">MP4 (when supported by this browser)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <div class="valueRow">
+        <label for="fov">Field of view / zoom</label>
+        <span id="fovValue" class="value">75°</span>
+      </div>
+
+      <input
+        id="fov"
+        type="range"
+        min="30"
+        max="110"
+        step="1"
+        value="75"
+      />
+    </div>
+
+    <div class="field">
+      <div class="valueRow">
+        <label for="tilt">Camera tilt</label>
+        <span id="tiltValue" class="value">0°</span>
+      </div>
+
+      <input
+        id="tilt"
+        type="range"
+        min="-80"
+        max="80"
+        step="1"
+        value="0"
+      />
+    </div>
+
+    <div class="buttons">
+      <button id="resetButton">Reset</button>
+      <button id="previewButton">Preview</button>
+      <button id="recordModeButton" class="primary">Record 360°</button>
+    </div>
+
+    <p class="hint">
+      Drag to position the starting view. Recording captures one complete spin
+      and downloads it automatically. Press <strong>Esc</strong> to stop early.
+    </p>
+  </div>
+
+  <button id="showControls">Show controls</button>
+
+  <div id="progressContainer">
+    <div id="progress"></div>
+  </div>
+
+  <script type="module">
+    import * as THREE from
+      "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
+
+    const viewer = document.getElementById("viewer");
+    const emptyMessage = document.getElementById("emptyMessage");
+    const controls = document.getElementById("controls");
+    const showControlsButton = document.getElementById("showControls");
+    const collapseButton = document.getElementById("collapseButton");
+
+    const imageInput = document.getElementById("imageInput");
+    const durationInput = document.getElementById("duration");
+    const directionInput = document.getElementById("direction");
+    const fovInput = document.getElementById("fov");
+    const tiltInput = document.getElementById("tilt");
+    const recordingResolution = document.getElementById("recordingResolution");
+    const exportFormat = document.getElementById("exportFormat");
+
+    const fovValue = document.getElementById("fovValue");
+    const tiltValue = document.getElementById("tiltValue");
+
+    const resetButton = document.getElementById("resetButton");
+    const previewButton = document.getElementById("previewButton");
+    const recordModeButton = document.getElementById("recordModeButton");
+
+    const progress = document.getElementById("progress");
+
+    const scene = new THREE.Scene();
+
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1100
+    );
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      preserveDrawingBuffer: true
+    });
+
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    viewer.appendChild(renderer.domElement);
+
+    const geometry = new THREE.SphereGeometry(500, 96, 64);
+
+    // Turn the sphere inside out so the panorama is visible from within.
+    geometry.scale(-1, 1, 1);
+
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffffff
+    });
+
+    const panoramaSphere = new THREE.Mesh(geometry, material);
+    scene.add(panoramaSphere);
+
+    let longitude = 0;
+    let latitude = 0;
+
+    let startLongitude = 0;
+    let spinStartTime = 0;
+    let pausedElapsed = 0;
+
+    let isSpinning = false;
+    let isPaused = false;
+    let imageLoaded = false;
+
+    let isDragging = false;
+    let pointerStartX = 0;
+    let pointerStartY = 0;
+    let dragStartLongitude = 0;
+    let dragStartLatitude = 0;
+
+    let currentObjectUrl = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRecording = false;
+    let recordingStream = null;
+    let recordedMimeType = "video/webm";
+
+    function clamp(value, minimum, maximum) {
+      return Math.max(minimum, Math.min(maximum, value));
+    }
+
+    function updateCamera() {
+      latitude = clamp(latitude, -85, 85);
+
+      const phi = THREE.MathUtils.degToRad(90 - latitude);
+      const theta = THREE.MathUtils.degToRad(longitude);
+
+      const target = new THREE.Vector3(
+        500 * Math.sin(phi) * Math.cos(theta),
+        500 * Math.cos(phi),
+        500 * Math.sin(phi) * Math.sin(theta)
+      );
+
+      camera.lookAt(target);
+    }
+
+    function render() {
+      updateCamera();
+      renderer.render(scene, camera);
+    }
+
+    function animate(timestamp) {
+      requestAnimationFrame(animate);
+
+      if (isSpinning && imageLoaded) {
+        const durationSeconds = clamp(
+          Number(durationInput.value) || 30,
+          1,
+          600
+        );
+
+        const durationMilliseconds = durationSeconds * 1000;
+        const elapsed = timestamp - spinStartTime;
+        const rotationProgress = clamp(
+          elapsed / durationMilliseconds,
+          0,
+          1
+        );
+
+        const direction = Number(directionInput.value);
+
+        longitude =
+          startLongitude +
+          direction * rotationProgress * 360;
+
+        progress.style.width =
+          `${rotationProgress * 100}%`;
+
+        if (rotationProgress >= 1) {
+          longitude =
+            startLongitude + direction * 360;
+
+          isSpinning = false;
+          isPaused = false;
+          pausedElapsed = 0;
+
+          if (isRecording) {
+            stopRecording();
+            document.body.classList.remove("recording");
+            showControls();
+          }
+        }
+      }
+
+      render();
+    }
+
+    function loadPanorama(file) {
+      if (!file) {
+        return;
+      }
+
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+      }
+
+      currentObjectUrl = URL.createObjectURL(file);
+
+      const textureLoader = new THREE.TextureLoader();
+
+      textureLoader.load(
+        currentObjectUrl,
+        (texture) => {
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.minFilter = THREE.LinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+
+          if (material.map) {
+            material.map.dispose();
+          }
+
+          material.map = texture;
+          material.needsUpdate = true;
+
+          imageLoaded = true;
+          emptyMessage.style.display = "none";
+          controls.classList.remove("awaitingImage");
+
+          resetSpin();
+        },
+        undefined,
+        (error) => {
+          console.error(error);
+          alert(
+            "The image could not be loaded. Try a JPG, PNG, or WebP panorama."
+          );
+        }
+      );
+    }
+
+    function startSpin() {
+      if (!imageLoaded) {
+        alert("Choose a 360° image first.");
+        return;
+      }
+
+      const duration = Number(durationInput.value);
+
+      if (!Number.isFinite(duration) || duration < 1) {
+        alert("Enter a duration of at least 1 second.");
+        return;
+      }
+
+      startLongitude = longitude;
+      spinStartTime = performance.now();
+      pausedElapsed = 0;
+
+      isSpinning = true;
+      isPaused = false;
+
+      progress.style.width = "0%";
+    }
+
+    function resetSpin() {
+      isSpinning = false;
+      isPaused = false;
+      pausedElapsed = 0;
+
+      longitude = 0;
+      latitude = Number(tiltInput.value);
+
+      progress.style.width = "0%";
+      render();
+    }
+
+    function hideControls() {
+      controls.classList.add("hidden");
+      showControlsButton.classList.add("visible");
+    }
+
+    function showControls() {
+      controls.classList.remove("hidden");
+      showControlsButton.classList.remove("visible");
+    }
+
+    async function toggleFullscreen() {
+      try {
+        if (!document.fullscreenElement) {
+          await document.documentElement.requestFullscreen();
+        } else {
+          await document.exitFullscreen();
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    function selectedVideoSize() {
+      return recordingResolution.value.split("x").map(Number);
+    }
+
+    function selectedMimeType() {
+      const choices = exportFormat.value === "mp4"
+        ? ["video/mp4;codecs=avc1.42E01E", "video/mp4"]
+        : ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+      return choices.find((type) => MediaRecorder.isTypeSupported(type)) || null;
+    }
+
+    function setRendererSize(width, height) {
+      renderer.setPixelRatio(1);
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+
+    function restoreViewportRenderer() {
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+    }
+
+    function finishRecording() {
+      recordingStream?.getTracks().forEach((track) => track.stop());
+      recordingStream = null;
+      restoreViewportRenderer();
+
+      if (!recordedChunks.length) {
+        return;
+      }
+
+      const clip = new Blob(recordedChunks, { type: recordedMimeType });
+      const url = URL.createObjectURL(clip);
+      const [width, height] = selectedVideoSize();
+      const extension = exportFormat.value;
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `360-spin-${width}x${height}.${extension}`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    async function startRecording() {
+      if (!window.MediaRecorder || !renderer.domElement.captureStream) {
+        alert("This browser does not support canvas recording. Try a current version of Chrome, Edge, or Firefox.");
+        return false;
+      }
+
+      if (isRecording) {
+        return true;
+      }
+
+      const mimeType = selectedMimeType();
+      if (!mimeType) {
+        alert("MP4 recording is not supported by this browser. Choose WebM, or use a browser that supports MediaRecorder MP4 output.");
+        return false;
+      }
+
+      const [width, height] = selectedVideoSize();
+      setRendererSize(width, height);
+      render();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      render();
+
+      recordedChunks = [];
+      recordingStream = renderer.domElement.captureStream(60);
+      recordedMimeType = mimeType;
+
+      mediaRecorder = new MediaRecorder(recordingStream, { mimeType });
+      mediaRecorder.addEventListener("dataavailable", (event) => {
+        if (event.data.size) {
+          recordedChunks.push(event.data);
+        }
+      });
+      mediaRecorder.addEventListener("stop", finishRecording, { once: true });
+      mediaRecorder.start(250);
+      isRecording = true;
+      recordModeButton.textContent = "Recording...";
+      return true;
+    }
+
+    function stopRecording() {
+      if (!isRecording) {
+        return;
+      }
+
+      isRecording = false;
+      recordModeButton.textContent = "Record 360°";
+      if (mediaRecorder?.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+    }
+
+    imageInput.addEventListener("change", (event) => {
+      const file = event.target.files?.[0];
+      loadPanorama(file);
+    });
+
+    resetButton.addEventListener("click", resetSpin);
+    previewButton.addEventListener("click", startSpin);
+    showControlsButton.addEventListener("click", showControls);
+    collapseButton.addEventListener("click", () => {
+      const isCollapsed = controls.classList.toggle("collapsed");
+      collapseButton.textContent = isCollapsed ? "Expand" : "Collapse";
+      collapseButton.setAttribute("aria-expanded", String(!isCollapsed));
+    });
+
+    recordModeButton.addEventListener("click", async () => {
+      if (!imageLoaded) {
+        alert("Choose a 360° image first.");
+        return;
+      }
+
+      document.body.classList.add("recording");
+      hideControls();
+
+      if (!document.fullscreenElement) {
+        await toggleFullscreen();
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+
+      const recordingStarted = await startRecording();
+      if (!recordingStarted) {
+        document.body.classList.remove("recording");
+        showControls();
+        return;
+      }
+
+      startSpin();
+    });
+    fovInput.addEventListener("input", () => {
+      camera.fov = Number(fovInput.value);
+      camera.updateProjectionMatrix();
+
+      fovValue.textContent = `${fovInput.value}°`;
+    });
+
+    tiltInput.addEventListener("input", () => {
+      latitude = Number(tiltInput.value);
+      tiltValue.textContent = `${tiltInput.value}°`;
+    });
+
+    renderer.domElement.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (!imageLoaded) {
+          return;
+        }
+
+        isDragging = true;
+
+        pointerStartX = event.clientX;
+        pointerStartY = event.clientY;
+
+        dragStartLongitude = longitude;
+        dragStartLatitude = latitude;
+
+        renderer.domElement.setPointerCapture(
+          event.pointerId
+        );
+      }
+    );
+
+    renderer.domElement.addEventListener(
+      "pointermove",
+      (event) => {
+        if (!isDragging) {
+          return;
+        }
+
+        const movementX =
+          event.clientX - pointerStartX;
+
+        const movementY =
+          event.clientY - pointerStartY;
+
+        longitude =
+          dragStartLongitude - movementX * 0.12;
+
+        latitude = clamp(
+          dragStartLatitude + movementY * 0.12,
+          -85,
+          85
+        );
+
+        tiltInput.value = Math.round(latitude);
+        tiltValue.textContent =
+          `${Math.round(latitude)}°`;
+      }
+    );
+
+    function stopDragging(event) {
+      isDragging = false;
+
+      if (
+        event.pointerId !== undefined &&
+        renderer.domElement.hasPointerCapture(
+          event.pointerId
+        )
+      ) {
+        renderer.domElement.releasePointerCapture(
+          event.pointerId
+        );
+      }
+    }
+
+    renderer.domElement.addEventListener(
+      "pointerup",
+      stopDragging
+    );
+
+    renderer.domElement.addEventListener(
+      "pointercancel",
+      stopDragging
+    );
+
+    renderer.domElement.addEventListener(
+      "wheel",
+      (event) => {
+        event.preventDefault();
+
+        camera.fov = clamp(
+          camera.fov + event.deltaY * 0.03,
+          30,
+          110
+        );
+
+        fovInput.value = Math.round(camera.fov);
+        fovValue.textContent =
+          `${Math.round(camera.fov)}°`;
+
+        camera.updateProjectionMatrix();
+      },
+      { passive: false }
+    );
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        stopRecording();
+        document.body.classList.remove("recording");
+        showControls();
+        return;
+      }
+
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
+      if (event.key.toLowerCase() === "h") {
+        if (controls.classList.contains("hidden")) {
+          showControls();
+        } else {
+          hideControls();
+        }
+      }
+
+    });
+
+    window.addEventListener("resize", () => {
+      if (!isRecording) {
+        restoreViewportRenderer();
+      }
+    });
+
+    animate(performance.now());
+  </script>
+</body>
+</html>
